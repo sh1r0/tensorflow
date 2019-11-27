@@ -472,4 +472,18 @@ tflite_cc_shared_object(
     ],
 )
 
+cc_binary(
+    name = "libtensorflow-lite.so",
+    linkopts=[
+        "-shared",
+        "-Wl,-soname=libtensorflow-lite.so",
+    ],
+    linkshared = 1,
+    copts = tflite_copts(),
+    deps = [
+        ":framework",
+        "//tensorflow/lite/kernels:builtin_ops",
+    ],
+)
+
 tflite_portable_test_suite()
