@@ -45,6 +45,9 @@ constexpr int kBatchSize = 1;
 
 constexpr int kNumDetectionsPerClass = 100;
 
+constexpr int kGridHeight = 1;
+constexpr int kGridWidth = 1;
+
 // Object Detection model produces axis-aligned boxes in two formats:
 // BoxCorner represents the lower left corner (xmin, ymin) and
 // the upper right corner (xmax, ymax).
@@ -90,6 +93,9 @@ struct OpData {
   int decoded_boxes_index;
   int scores_index;
   int active_candidate_index;
+  bool is_centernet;
+  int grid_h;
+  int grid_w;
 };
 
 void* Init(TfLiteContext* context, const char* buffer, size_t length) {
@@ -115,6 +121,21 @@ void* Init(TfLiteContext* context, const char* buffer, size_t length) {
   op_data->scale_values.x = m["x_scale"].AsFloat();
   op_data->scale_values.h = m["h_scale"].AsFloat();
   op_data->scale_values.w = m["w_scale"].AsFloat();
+  if (m["is_centernet"].IsNull()) {
+	op_data->is_centernet = false;
+  } else {
+	op_data->is_centernet = m["is_centernet"].AsBool();
+  }
+  if (m["grid_h"].IsNull()) {
+	op_data->grid_h = kGridHeight;
+  } else {
+	op_data->grid_h = m["grid_h"].AsInt32();
+  }
+  if (m["grid_w"].IsNull()) {
+	op_data->grid_w = kGridWidth;
+  } else {
+	op_data->grid_w = m["grid_w"].AsInt32();
+  }
   context->AddTensors(context, 1, &op_data->decoded_boxes_index);
   context->AddTensors(context, 1, &op_data->scores_index);
   context->AddTensors(context, 1, &op_data->active_candidate_index);
@@ -275,6 +296,8 @@ TfLiteStatus DecodeCenterSizeBoxes(TfLiteContext* context, TfLiteNode* node,
   CenterSizeEncoding box_centersize;
   CenterSizeEncoding scale_values = op_data->scale_values;
   CenterSizeEncoding anchor;
+  int grid_h = op_data->grid_h;
+  int grid_w = op_data->grid_w;
   for (int idx = 0; idx < num_boxes; ++idx) {
     switch (input_box_encodings->type) {
         // Quantized
@@ -306,14 +329,27 @@ TfLiteStatus DecodeCenterSizeBoxes(TfLiteContext* context, TfLiteNode* node,
         return kTfLiteError;
     }
 
-    float ycenter = box_centersize.y / scale_values.y * anchor.h + anchor.y;
-    float xcenter = box_centersize.x / scale_values.x * anchor.w + anchor.x;
-    float half_h =
-        0.5f * static_cast<float>(std::exp(box_centersize.h / scale_values.h)) *
-        anchor.h;
-    float half_w =
-        0.5f * static_cast<float>(std::exp(box_centersize.w / scale_values.w)) *
-        anchor.w;
+	float ycenter;
+	float xcenter;
+	float half_h;
+	float half_w;
+	if (op_data->is_centernet) {
+      ycenter = (box_centersize.y / scale_values.y + anchor.y) / grid_h;
+      xcenter = (box_centersize.x / scale_values.x + anchor.x) / grid_w;
+      half_h = 0.5f * box_centersize.h / scale_values.h / grid_h;
+      half_w = 0.5f * box_centersize.w / scale_values.w / grid_w;
+	} else {
+      ycenter = box_centersize.y / scale_values.y * anchor.h + anchor.y;
+      xcenter = box_centersize.x / scale_values.x * anchor.w + anchor.x;
+      half_h =
+          0.5f *
+		  static_cast<float>(std::exp(box_centersize.h / scale_values.h)) *
+          anchor.h;
+      half_w =
+          0.5f *
+		  static_cast<float>(std::exp(box_centersize.w / scale_values.w)) *
+          anchor.w;
+	}
     TfLiteTensor* decoded_boxes =
         &context->tensors[op_data->decoded_boxes_index];
     auto& box = ReInterpretTensor<BoxCornerEncoding*>(decoded_boxes)[idx];
