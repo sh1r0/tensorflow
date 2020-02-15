@@ -113,3 +113,16 @@ http_archive(
         "https://storage.googleapis.com/download.tensorflow.org/models/speech_commands_v0.01.zip",
     ],
 )
+
+android_sdk_repository(
+   name = "androidsdk",
+   api_level = 29,
+   build_tools_version = "29.0.2",
+   path = "/home/shiro/Android/Sdk",
+)
+
+android_ndk_repository(
+   name="androidndk",
+   path="/home/shiro/Android/Sdk/ndk/20.1.5948944",
+   api_level=28
+)
